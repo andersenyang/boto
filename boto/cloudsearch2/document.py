@@ -183,24 +183,29 @@ class DocumentServiceConnection(object):
             index = sdf.index(': null')
             boto.log.error(sdf[index - 100:index + 100])
 
-        api_version = '2013-01-01'
+        headers = {'Content-Type': 'application/json'}
         if self.domain:
             api_version = self.domain.layer1.APIVersion
-        url = "http://%s/%s/documents/batch" % (self.endpoint, api_version)
+            path = "/%s/documents/batch" % api_version
 
-        # Keep-alive is automatic in a post-1.0 requests world.
-        session = requests.Session()
-        session.proxies = self.proxy
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=20,
-            pool_maxsize=50,
-            max_retries=5
-        )
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-        r = session.post(url, data=sdf,
-                         headers={'Content-Type': 'application/json'})
+            r = self.domain.layer1.make_request(None, path=path, verb='POST', data=sdf)
+        else:
+            api_version = '2013-01-01'
+            url = "http://%s/%s/documents/batch" % (self.endpoint, api_version)
 
+            # Keep-alive is automatic in a post-1.0 requests world.
+            session = requests.Session()
+            session.proxies = self.proxy
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=20,
+                pool_maxsize=50,
+                max_retries=5
+            )
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+            r = session.post(url, data=sdf,
+                             headers=headers)
+        boto.log.error('repsonse %s' % r)
         return CommitResponse(r, self, sdf)
 
 

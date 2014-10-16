@@ -43,6 +43,7 @@ class AWSMockServiceTestCase(unittest.TestCase):
         response = mock.Mock(spec=http_client.HTTPResponse)
         response.status = status_code
         response.read.return_value = body
+        response.content = body
         response.reason = reason
 
         response.getheaders.return_value = header

@@ -1,38 +1,66 @@
 #!/usr/bin env python
 
-from tests.unit import unittest
-from httpretty import HTTPretty
+from tests.unit import AWSMockServiceTestCase
 
 import json
 
-from boto.cloudsearch2.document import DocumentServiceConnection
+from boto.cloudsearch2.layer1 import CloudSearchConnection
+from boto.cloudsearch2.domain import Domain
+from httpretty import HTTPretty
+import boto
 
 
-HOSTNAME = "doc-demo-userdomain.us-east-1.cloudsearch.amazonaws.com"
-FULL_URL = "http://%s/2013-01-01/documents/batch" % HOSTNAME
+DOC_SERVICE = "doc-demo-userdomain.us-east-1.cloudsearch.amazonaws.com"
+FULL_URL = "http://%s/2013-01-01/documents/batch" % DOC_SERVICE
 
-class CloudSearchDocumentUploadAuthTest(unittest.TestCase):
+
+class CloudSearchDocumentUploadAuthTest(AWSMockServiceTestCase):
+    connection_class = CloudSearchConnection
+
+    domain = b"""{
+        "SearchInstanceType": null,
+        "DomainId": "1234567890/demo",
+        "DomainName": "demo",
+        "Deleted": false,
+        "SearchInstanceCount": 0,
+        "Created": true,
+        "SearchService": {
+          "Endpoint": "search-demo.us-east-1.cloudsearch.amazonaws.com"
+        },
+        "RequiresIndexDocuments": false,
+        "Processing": false,
+        "DocService": {
+          "Endpoint": "%s"
+        },
+        "ARN": "arn:aws:cs:us-east-1:1234567890:domain/demo",
+        "SearchPartitionCount": 0
+    }""" % DOC_SERVICE
+
+    response = {'status': 'success',
+                'adds': 1,
+                'deletes': 0,
+                }
 
     def setUp(self):
         HTTPretty.enable()
         HTTPretty.register_uri(
             HTTPretty.POST,
             FULL_URL,
-            body=json.dumps({'status': 'success',
-                             'adds': 1,
-                             'deletes': 0,
-                             }).encode('utf-8'),
+            body=json.dumps(self.response).encode('utf-8'),
             content_type="application/json")
+        super(CloudSearchDocumentUploadAuthTest, self).setUp()
 
     def tearDown(self):
         HTTPretty.disable()
 
     def test_upload_document_with_auth(self):
-        document = DocumentServiceConnection(endpoint=HOSTNAME)
+        conn = self.service_connection
+        domain = Domain(conn, json.loads(self.domain))
+        document = domain.get_document_service()
         document.add("1234", {"id": "1234", "title": "Title 1",
                               "category": ["cat_a", "cat_b", "cat_c"]})
 
         document.commit()
         headers = HTTPretty.last_request.headers
-
-        self.assertIsNotNone(headers.get('Authorization'))
+        print headers
+        self.assertIsNotNone()
