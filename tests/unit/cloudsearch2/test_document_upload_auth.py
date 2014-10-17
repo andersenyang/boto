@@ -7,7 +7,6 @@ import json
 from boto.cloudsearch2.layer1 import CloudSearchConnection
 from boto.cloudsearch2.domain import Domain
 from httpretty import HTTPretty
-import boto
 
 
 DOC_SERVICE = "doc-demo-userdomain.us-east-1.cloudsearch.amazonaws.com"
@@ -47,7 +46,8 @@ class CloudSearchDocumentUploadAuthTest(AWSMockServiceTestCase):
             HTTPretty.POST,
             FULL_URL,
             body=json.dumps(self.response).encode('utf-8'),
-            content_type="application/json")
+            content_type="application/json",
+            status=200)
         super(CloudSearchDocumentUploadAuthTest, self).setUp()
 
     def tearDown(self):
@@ -56,11 +56,17 @@ class CloudSearchDocumentUploadAuthTest(AWSMockServiceTestCase):
     def test_upload_document_with_auth(self):
         conn = self.service_connection
         domain = Domain(conn, json.loads(self.domain))
-        document = domain.get_document_service()
-        document.add("1234", {"id": "1234", "title": "Title 1",
+        document_service = domain.get_document_service()
+        document_service.add("1234", {"id": "1234", "title": "Title 1",
                               "category": ["cat_a", "cat_b", "cat_c"]})
 
-        document.commit()
-        headers = HTTPretty.last_request.headers
-        print headers
-        self.assertIsNotNone()
+        self.set_http_response(status_code=200, body=json.dumps(self.response))
+        document_service.commit()
+
+        headers = None
+        if self.actual_request is not None:
+            headers = self.actual_request.headers
+        if headers is None:
+            headers = HTTPretty.last_request.headers
+
+        self.assertIsNotNone(headers.get('Authorization'))

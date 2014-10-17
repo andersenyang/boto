@@ -272,13 +272,20 @@ class SearchConnection(object):
         :rtype: :class:`boto.cloudsearch2.search.SearchResults`
         :return: search results
         """
-        api_version = '2013-01-01'
+
         if self.domain:
             api_version = self.domain.layer1.APIVersion
-        url = "http://%s/%s/search" % (self.endpoint, api_version)
-        params = query.to_params()
+            path = "/%s/search" % api_version
+            params = query.to_params()
 
-        r = self.session.get(url, params=params)
+            r = self.domain.layer1.make_request(None, path=path, params=params, verb='GET')
+        else:
+            api_version = '2013-01-01'
+            url = "http://%s/%s/search" % (self.endpoint, api_version)
+            params = query.to_params()
+
+            r = self.session.get(url, params=params)
+
         _body = r.content.decode('utf-8')
         try:
             data = json.loads(_body)

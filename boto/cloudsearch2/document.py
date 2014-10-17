@@ -205,7 +205,7 @@ class DocumentServiceConnection(object):
             session.mount('https://', adapter)
             r = session.post(url, data=sdf,
                              headers=headers)
-        boto.log.error('repsonse %s' % r)
+
         return CommitResponse(r, self, sdf)
 
 

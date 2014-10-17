@@ -1,17 +1,41 @@
 #!/usr/bin env python
 
-from tests.unit import unittest
-from httpretty import HTTPretty
+from tests.unit import AWSMockServiceTestCase
 
 import json
+
+from boto.cloudsearch2.layer1 import CloudSearchConnection
+from boto.cloudsearch2.domain import Domain
+from httpretty import HTTPretty
 
 from boto.cloudsearch2.search import SearchConnection
 
 
-HOSTNAME = "search-demo-userdomain.us-east-1.cloudsearch.amazonaws.com"
-FULL_URL = 'http://%s/2013-01-01/search' % HOSTNAME
+SEARCH_SERVICE = "search-demo-userdomain.us-east-1.cloudsearch.amazonaws.com"
+FULL_URL = 'http://%s/2013-01-01/search' % SEARCH_SERVICE
 
-class CloudSearchSearchAuthTest(unittest.TestCase):
+
+class CloudSearchSearchAuthTest(AWSMockServiceTestCase):
+    connection_class = CloudSearchConnection
+
+    domain = b"""{
+        "SearchInstanceType": null,
+        "DomainId": "1234567890/demo",
+        "DomainName": "demo",
+        "Deleted": false,
+        "SearchInstanceCount": 0,
+        "Created": true,
+        "SearchService": {
+          "Endpoint": "%s"
+        },
+        "RequiresIndexDocuments": false,
+        "Processing": false,
+        "DocService": {
+          "Endpoint": "doc-demo.us-east-1.cloudsearch.amazonaws.com"
+        },
+        "ARN": "arn:aws:cs:us-east-1:1234567890:domain/demo",
+        "SearchPartitionCount": 0
+    }""" % SEARCH_SERVICE
 
     response = {
         'rank': '-text_relevance',
@@ -38,24 +62,29 @@ class CloudSearchSearchAuthTest(unittest.TestCase):
 
     def setUp(self):
         HTTPretty.enable()
-        body = self.response
-        if not isinstance(body, bytes):
-            body = json.dumps(body).encode('utf-8')
-
         HTTPretty.register_uri(
             HTTPretty.GET,
             FULL_URL,
-            body=body,
+            body=json.dumps(self.response).encode('utf-8'),
             content_type="application/json",
             status=200)
+        super(CloudSearchSearchAuthTest, self).setUp()
 
     def tearDown(self):
         HTTPretty.disable()
 
     def test_search_with_auth(self):
-        search = SearchConnection(endpoint=HOSTNAME)
+        conn = self.service_connection
+        domain = Domain(conn, json.loads(self.domain))
+        search_service = domain.get_search_service()
 
-        search.search(q='Test', options='TestOptions')
-        headers = HTTPretty.last_request.headers
+        self.set_http_response(status_code=200, body=json.dumps(self.response))
+        search_service.search(q='Test', options='TestOptions')
+
+        headers = None
+        if self.actual_request is not None:
+            headers = self.actual_request.headers
+        if headers is None:
+            headers = HTTPretty.last_request.headers
 
         self.assertIsNotNone(headers.get('Authorization'))
