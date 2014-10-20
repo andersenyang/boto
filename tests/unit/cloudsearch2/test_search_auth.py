@@ -72,6 +72,7 @@ class CloudSearchSearchAuthTest(AWSMockServiceTestCase):
 
     def tearDown(self):
         HTTPretty.disable()
+        super(CloudSearchSearchAuthTest, self).tearDown()
 
     def test_search_with_auth(self):
         conn = self.service_connection

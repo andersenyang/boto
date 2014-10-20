@@ -52,6 +52,7 @@ class CloudSearchDocumentUploadAuthTest(AWSMockServiceTestCase):
 
     def tearDown(self):
         HTTPretty.disable()
+        super(CloudSearchDocumentUploadAuthTest, self).tearDown()
 
     def test_upload_document_with_auth(self):
         conn = self.service_connection
