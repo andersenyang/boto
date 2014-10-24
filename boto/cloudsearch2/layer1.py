@@ -66,6 +66,9 @@ class CloudSearchConnection(AWSQueryConnection):
         if 'host' not in kwargs or kwargs['host'] is None:
             kwargs['host'] = region.endpoint
 
+        sign_request = kwargs.pop('sign_request', False)
+        self.sign_request = sign_request
+
         super(CloudSearchConnection, self).__init__(**kwargs)
         self.region = region
 
