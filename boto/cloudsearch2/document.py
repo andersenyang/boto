@@ -25,6 +25,7 @@ import boto.exception
 from boto.compat import json
 import requests
 import boto
+from boto.cloudsearch2.cloudsearchhelper import CloudSearchHelper
 
 
 class SearchServiceException(Exception):
@@ -184,24 +185,35 @@ class DocumentServiceConnection(object):
             boto.log.error(sdf[index - 100:index + 100])
 
         api_version = '2013-01-01'
-        if self.domain:
-            api_version = self.domain.layer1.APIVersion
-        url = "http://%s/%s/documents/batch" % (self.endpoint, api_version)
+        headers = {'Content-Type': 'application/json'}
+        sign_request = False
+        if self.domain and self.domain.layer1:
+            layer1 = self.domain.layer1
+            api_version = layer1.APIVersion
+            if getattr(layer1, 'sign_request', False):
+                sign_request = True
+                helper = CloudSearchHelper(host=self.endpoint, aws_access_key_id=layer1.aws_access_key_id,
+                                           aws_secret_access_key=layer1.aws_secret_access_key,
+                                           region=layer1.region, provider=layer1.provider)
 
-        # Keep-alive is automatic in a post-1.0 requests world.
-        session = requests.Session()
-        session.proxies = self.proxy
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=20,
-            pool_maxsize=50,
-            max_retries=5
-        )
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-        r = session.post(url, data=sdf,
-                         headers={'Content-Type': 'application/json'})
+        if sign_request:
+            r = helper.upload(sdf, api_version=api_version, headers=headers)
+        else:
+            url = "http://%s/%s/documents/batch" % (self.endpoint, api_version)
 
-        return CommitResponse(r, self, sdf)
+            # Keep-alive is automatic in a post-1.0 requests world.
+            session = requests.Session()
+            session.proxies = self.proxy
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=20,
+                pool_maxsize=50,
+                max_retries=5
+            )
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+            r = session.post(url, data=sdf, headers=headers)
+
+        return CommitResponse(r, self, sdf, signed_request=sign_request)
 
 
 class CommitResponse(object):
@@ -219,12 +231,16 @@ class CommitResponse(object):
     :raises: :class:`boto.cloudsearch2.document.EncodingError`
     :raises: :class:`boto.cloudsearch2.document.ContentTooLongError`
     """
-    def __init__(self, response, doc_service, sdf):
+    def __init__(self, response, doc_service, sdf, signed_request=False):
         self.response = response
         self.doc_service = doc_service
         self.sdf = sdf
+        self.signed_request = signed_request
 
-        _body = response.content.decode('utf-8')
+        if self.signed_request:
+            _body = response.read().decode('utf-8')
+        else:
+            _body = response.content.decode('utf-8')
 
         try:
             self.content = json.loads(_body)
@@ -266,7 +282,10 @@ class CommitResponse(object):
                           if d['type'] == type_])
 
         if response_num != commit_num:
-            boto.log.debug(self.response.content)
+            if self.signed_request:
+                boto.log.debug(self.response.read())
+            else:
+                boto.log.debug(self.response.content)
             # There will always be a commit mismatch error if there is any
             # errors on cloudsearch. self.errors gets lost when this
             # CommitMismatchError is raised. Whoever is using boto has no idea
