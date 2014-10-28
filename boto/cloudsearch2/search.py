@@ -23,6 +23,7 @@
 from math import ceil
 from boto.compat import json, map, six
 import requests
+from boto.cloudsearch2.cloudsearchauthconnection import CloudSearchAuthConnection
 
 SIMPLE = 'simple'
 STRUCTURED = 'structured'
@@ -152,12 +153,13 @@ class SearchConnection(object):
         self.endpoint = endpoint
         self.session = requests.Session()
 
+        if not endpoint:
+            self.endpoint = domain.search_service_endpoint
+
         # Copy proxy settings from connection
         if self.domain and self.domain.layer1 and self.domain.layer1.use_proxy:
             self.session.proxies['http'] = self.domain.layer1.get_proxy_url_with_auth()
 
-        if not endpoint:
-            self.endpoint = domain.search_service_endpoint
 
     def build_query(self, q=None, parser=None, fq=None, rank=None, return_fields=None,
                     size=10, start=0, facet=None, highlight=None, sort=None,
@@ -168,7 +170,7 @@ class SearchConnection(object):
 
     def search(self, q=None, parser=None, fq=None, rank=None, return_fields=None,
                size=10, start=0, facet=None, highlight=None, sort=None, partial=None,
-               options=None):
+               options=None, method='GET'):
         """
         Send a query to CloudSearch
 
@@ -261,9 +263,24 @@ class SearchConnection(object):
                                  size=size, start=start, facet=facet,
                                  highlight=highlight, sort=sort,
                                  partial=partial, options=options)
-        return self(query)
+        return self(query, method)
 
-    def __call__(self, query):
+    def _search_with_auth(self, params, api_version, method):
+        layer1 = self.domain.layer1
+        helper = CloudSearchAuthConnection(host=self.endpoint, aws_access_key_id=layer1.aws_access_key_id,
+                                           aws_secret_access_key=layer1.aws_secret_access_key,
+                                           region=layer1.region, provider=layer1.provider)
+        resp = helper.search(params, api_version, method=method)
+
+        return {'body': resp.read().decode('utf-8'), 'status_code': resp.status}
+
+    def _search_without_auth(self, params, api_version):
+        url = "http://%s/%s/search" % (self.endpoint, api_version)
+        resp = self.session.get(url, params=params)
+
+        return {'body': resp.content.decode('utf-8'), 'status_code': resp.status_code}
+
+    def __call__(self, query, method):
         """Make a call to CloudSearch
 
         :type query: :class:`boto.cloudsearch2.search.Query`
@@ -273,17 +290,25 @@ class SearchConnection(object):
         :return: search results
         """
         api_version = '2013-01-01'
-        if self.domain:
-            api_version = self.domain.layer1.APIVersion
-        url = "http://%s/%s/search" % (self.endpoint, api_version)
         params = query.to_params()
+        sign_request = False
+        if self.domain and self.domain.layer1:
+            api_version = self.domain.layer1.APIVersion
+            if getattr(self.domain.layer1, 'sign_request', False):
+                sign_request = True
 
-        r = self.session.get(url, params=params)
-        _body = r.content.decode('utf-8')
+        if sign_request:
+            r = self._search_with_auth(params, api_version, method)
+        else:
+            r = self._search_without_auth(params, api_version)
+
+        _body = r['body']
+        _status_code = r['status_code']
+
         try:
             data = json.loads(_body)
         except ValueError:
-            if r.status_code == 403:
+            if _status_code == 403:
                 msg = ''
                 import re
                 g = re.search('<html><body><h1>403 Forbidden</h1>([^<]+)<', _body)
