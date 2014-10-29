@@ -280,7 +280,7 @@ class SearchConnection(object):
 
         return {'body': resp.content.decode('utf-8'), 'status_code': resp.status_code}
 
-    def __call__(self, query, method):
+    def __call__(self, query, method='GET'):
         """Make a call to CloudSearch
 
         :type query: :class:`boto.cloudsearch2.search.Query`
@@ -294,8 +294,7 @@ class SearchConnection(object):
         sign_request = False
         if self.domain and self.domain.layer1:
             api_version = self.domain.layer1.APIVersion
-            if getattr(self.domain.layer1, 'sign_request', False):
-                sign_request = True
+            sign_request = getattr(self.domain.layer1, 'sign_request', False)
 
         if sign_request:
             r = self._search_with_auth(params, api_version, method)

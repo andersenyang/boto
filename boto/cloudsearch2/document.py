@@ -214,8 +214,7 @@ class DocumentServiceConnection(object):
         sign_request = False
         if self.domain and self.domain.layer1:
             api_version = self.domain.layer1.APIVersion
-            if getattr(self.domain.layer1, 'sign_request', False):
-                sign_request = True
+            sign_request = getattr(self.domain.layer1, 'sign_request', False)
 
         if sign_request:
             r = self._commit_with_auth(sdf, api_version)

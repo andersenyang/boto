@@ -58,13 +58,15 @@ class CloudSearchAuthConnection(AWSAuthConnection):
     def _required_auth_capability(self):
         return ['hmac-v4']
 
-    def process_search_query_for_post(self, params):
-        l = []
-        for param in sorted(params):
-            value = boto.utils.get_utf8_value(params[param])
-            l.append('%s=%s' % (urllib.parse.quote(param, safe='-_.~'),
-                                urllib.parse.quote(value, safe='-_.~')))
-        return '&'.join(l)
+    def build_query_string(self, params):
+        if params:
+            l = []
+            for param in sorted(params):
+                value = boto.utils.get_utf8_value(params[param])
+                l.append('%s=%s' % (urllib.parse.quote(param, safe='-_.~'),
+                                    urllib.parse.quote(value, safe='-_.~')))
+            return '&'.join(l)
+        return ''
 
     def search(self, query, api_version=APIVersion, method='GET'):
         if method != 'GET' and method != 'POST':
@@ -73,18 +75,15 @@ class CloudSearchAuthConnection(AWSAuthConnection):
         path = "/%s/search" % api_version
         auth_path = None
 
+
+        self.auth_service_name = 'cloudsearch'
+        self.auth_region_name = self.region
         if method == 'GET':
-            http_request = self.build_base_http_request(method, path, auth_path, params=query, headers=headers)
-
-            self.auth_service_name = 'cloudsearch'
-            self.auth_region_name = self.region
+            http_request = self.build_base_http_request(method, path, auth_path, params=query)
         else:
-            query = self.process_search_query_for_post(query)
+            query = self.build_query_string(query)
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-
             http_request = self.build_base_http_request(method, path, auth_path, data=query, headers=headers)
-            self.auth_service_name = 'cloudsearch'
-            self.auth_region_name = self.region
 
         response = self._mexe(http_request)
         return response
